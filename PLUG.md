@@ -37,5 +37,20 @@ Set the PlantUML server (and optionally the fetch mode) in your own `CONFIG` pag
 only an `https` reverse proxy of the PlantUML server is reachable from the
 browser). See the [repository README](https://github.com/liooil/silverbullet-plantuml#fetching).
 
+## Dark mode
+
+PlantUML has no automatic dark mode, so diagrams would stay white boxes on
+SilverBullet's dark theme. The widget renders the diagram for the editor's
+current theme and asks the plug for the other one when the theme switches
+(showing the first one inverted for the moment that takes), so no diagram is
+rendered twice: `darktheme` (default `cyborg`) names the
+[PlantUML theme](https://plantuml.com/theme) for the dark render, `lighttheme`
+optionally themes the light one. Set `darktheme = false` to skip the dark
+render — dark mode then always inverts the light diagram.
+
+    config.set("plantuml", {serverurl="https://www.plantuml.com/plantuml", darktheme="superhero"})
+
+See [Dark mode](https://github.com/liooil/silverbullet-plantuml#dark-mode) in the README.
+
 > Deliberately not a `space-lua` block: code blocks in this page would run when
 > the page is indexed, overriding whatever the space's own CONFIG sets.

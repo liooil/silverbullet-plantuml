@@ -25,7 +25,7 @@ Run `Plugs: Update` command and off you go!
 
 ## No build step
 
-`plantuml.plug.js` **is** the source: ~290 commented lines of plain JavaScript,
+`plantuml.plug.js` **is** the source: ~570 commented lines of plain JavaScript,
 no dependencies, no bundler, no `node_modules`, no CI build. Download it into a
 space, run `Plugs: Reload` and it is live; edit it in the space and reload again.
 Two things upstream gets from its build, and what this fork does instead:
@@ -96,6 +96,52 @@ config.set("plantuml", {
 ```
 
 `proxyurl` defaults to `serverurl`.
+
+## Dark mode
+
+PlantUML has no automatic dark mode: a diagram's colors are baked into the
+render, and the way to get a dark diagram is one of PlantUML's own
+[dark themes](https://plantuml.com/theme) (`cyborg`, `superhero`, `hacker`,
+`mars`, `materia`, `spacelab`, `black-knight`, …). Left alone, diagrams are
+bright white boxes on SilverBullet's dark theme.
+
+So a diagram is rendered **once per theme, on demand**: the widget renders the
+variant for the theme the editor is in, and when the theme switches it asks the
+plug for the other one — `renderVariant`, called from the widget through
+`system.invokeFunction` — and swaps it in. Until that render arrives, and if it
+never does, the variant that is on screen is shown inverted rather than as a
+white box. Renders are cached per theme/server/source until the plug is
+reloaded, so switching back and forth (or scrolling a diagram out of view and
+back) renders nothing twice.
+
+Which theme each variant uses is configuration; `darktheme` (default `cyborg`)
+can be any PlantUML theme, `lighttheme` is optional:
+
+```space-lua
+config.set("plantuml", {
+  darktheme = "superhero", -- any PlantUML theme; default "cyborg"
+  lighttheme = "_none_",   -- optional, for the light variant
+})
+```
+
+A diagram that sets its own `!theme` (or `skinparam`s) keeps them: the plug's
+`!theme` is injected right after `@startuml`, and PlantUML applies the last one.
+
+Several dark themes (`cyborg`, `cyborg-outline`, `superhero`,
+`superhero-outline`, `hacker`, `materia`, `spacelab`, `black-knight`) leave the
+background transparent, so SilverBullet's own background shows through instead
+of a dark box; others (`mars`, `crt-green`, `reddress-darkblue`, …) paint a
+background of their own.
+
+Set `darktheme = false` (or `"_none_"`) to skip the dark render altogether:
+dark mode then always inverts the light diagram.
+
+The editor's dark mode is read while the widget is rendered
+(`editor.getUiOption("darkMode")`), so an explicit dark mode gets the dark
+diagram right away. When that setting follows the operating system it reports
+nothing, and the widget renders the plain diagram first and asks for the dark
+one as soon as it knows the resolved theme — that is the one case where the
+inverted diagram is visible for a moment.
 
 ## Configuration
 
