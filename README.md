@@ -11,17 +11,33 @@ This plug adds basic [PlantUML](https://www.plantuml.com) support to Silver Bull
 
 ## Installation
 
-The plug is installed like any other plug using SpaceLua. Just add `ghr:liooil/silverbullet-plantuml` to the plugs array in your CONFIG page.
+The plug is distributed as a [library](https://silverbullet.md/Library) that
+installs straight from this repository — there is no build step and no release
+to fetch, the committed `plantuml.plug.js` *is* the plug. Run **`Library:
+Install`** (or open the Libraries manager from the app menu) and give it this
+URI:
 
-```space-lua
-config.set {
-  plugs = {
-  "ghr:liooil/silverbullet-plantuml"
-  }
-}
+```
+https://github.com/liooil/silverbullet-plantuml/blob/main/PLUG.md
 ```
 
-Run `Plugs: Update` command and off you go!
+`github:liooil/silverbullet-plantuml@main/PLUG.md` works as well. That fetches
+`PLUG.md` and, because its frontmatter lists `files: [plantuml.plug.js]`, the
+plug file next to it; both land in your space under `Library/liooil/`, and the
+plug is loaded right away. Later, **`Library: Update`** pulls new commits. To
+pin a version, use a tag or a commit instead of `main`:
+
+```
+github:liooil/silverbullet-plantuml@<tag-or-commit>/PLUG.md
+```
+
+> An older `ghr:`-style install (`plugs = {"ghr:liooil/silverbullet-plantuml"}`
+> in `CONFIG`) reads the `edge` *release* instead of the source, and that release
+> is only as fresh as its last manual upload. The library route above needs no
+> release at all, so it is the supported one.
+
+To just try it out without installing anything, download `plantuml.plug.js`
+into a space and run `Plugs: Reload` — any `*.plug.js` in a space is loaded.
 
 ## No build step
 
@@ -235,14 +251,16 @@ This helper script is needed as I couldn't get to call the plantuml.jar directly
 
 ## Releasing
 
-There is nothing to compile. Pushing to `main` runs
-[Publish](.github/workflows/publish.yml), which re-points the `edge` tag and
-uploads the committed `plantuml.plug.js` + `PLUG.md` as release assets (that is
-what `ghr:` URIs resolve to). To publish by hand:
+Nothing to compile and nothing to upload: `main` **is** the release. Whatever is
+committed — `plantuml.plug.js` and the `PLUG.md` that lists it — is what
+`Library: Install` and `Library: Update` fetch from
+`https://github.com/liooil/silverbullet-plantuml/blob/main/PLUG.md`, and anyone
+who wants a fixed version can install a tag or commit instead of `main`.
 
-```bash
-gh release create edge --title edge --notes "…" plantuml.plug.js PLUG.md
-```
+An `edge` GitHub release still exists from when the plug was published as a
+release asset for `ghr:` URIs; it is stale, and the workflow that used to update
+it was removed (it never ran on this fork anyway — GitHub does not run workflows
+on forks until they are enabled).
 
 ## Use
 
