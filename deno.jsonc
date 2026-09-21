@@ -6,6 +6,7 @@
   "imports": {
     "@silverbulletmd/silverbullet": "jsr:@silverbulletmd/silverbullet@^2.0.0",
     "handlebars": "https://esm.sh/handlebars",
+    "plantuml-encoder": "npm:plantuml-encoder@^1.4.0",
     "$sb/": "https://deno.land/x/silverbullet@2.0.0/plug-api/"
   }
 }

@@ -2,19 +2,50 @@
 
 This plug adds basic [PlantUML](https://www.plantuml.com) support to Silver Bullet.
 
+> **This is a fork** of [LogeshG5/silverbullet-plantuml](https://github.com/LogeshG5/silverbullet-plantuml).
+> The only behavioural change: diagram requests are made with the browser's own
+> `fetch` (the *frontend* fetch) instead of SilverBullet's server-side `/.proxy`
+> endpoint, with an automatic fallback to the proxy. See [Fetching](#fetching).
+
 ## Installation
 
-The plug is installed like any other plug using SpaceLua. Just add `ghr:LogeshG5/silverbullet-plantuml` to the plugs array in your CONFIG page.
+The plug is installed like any other plug using SpaceLua. Just add `ghr:liooil/silverbullet-plantuml` to the plugs array in your CONFIG page.
 
 ```space-lua
 config.set {
   plugs = {
-  "ghr:LogeshG5/silverbullet-plantuml"
+  "ghr:liooil/silverbullet-plantuml"
   }
 }
 ```
 
 Run `Plugs: Update` command and off you go!
+
+## Fetching
+
+Plug code runs in a web worker in which SilverBullet replaces `fetch` with a
+version that routes every request through the server's `/.proxy` endpoint (and
+that endpoint requires write access). This fork prefers the browser's own
+`fetch` instead, which the worker runtime keeps available as `nativeFetch`:
+
+| `fetchmode` | Who makes the request | Requires |
+| --- | --- | --- |
+| `frontend` | the browser, straight to the PlantUML server | CORS headers from the PlantUML server |
+| `proxy` | the SilverBullet server (`/.proxy`) | write access to the space, reachable server |
+| `auto` (default) | `frontend`, falling back to `proxy` | — |
+
+The default remote server (`https://plantuml.com/plantuml`) sends
+`Access-Control-Allow-Origin: *`, so with `auto` the request never touches the
+server proxy. That makes the plug work in read-only/published spaces and while
+the SilverBullet server is unreachable. A self-hosted PlantUML server that does
+not send CORS headers still works through the fallback.
+
+To pin a mode explicitly (for example to keep diagrams off the client network,
+or to avoid the failed frontend attempt on a CORS-less server):
+
+```space-lua
+config.set("plantuml", {serverurl="https://plantuml.com/plantuml", fetchmode="proxy"})
+```
 
 ## Configuration
 
@@ -54,6 +85,10 @@ config.set("plantuml", {serverurl="http://{ip or hostname}"})
 
 > **Note**
 > You might want to have a reverse proxy such as [Traefik](https://doc.traefik.io/traefik/), or [Caddy](https://caddyserver.com/) in front of the PlantUML container.
+>
+> **Note**
+> A browser can only reach such a server directly if it sends CORS headers;
+> otherwise the `proxy` fetch mode (or a CORS-enabled reverse proxy) is needed.
 
 ### 3. Local Server Configuration
 
@@ -101,6 +136,30 @@ config.set("plantuml", {generator="/usr/local/bin/gen_plantuml_svg"})
 ```
 
 This helper script is needed as I couldn't get to call the plantuml.jar directly from this plugin.
+
+## Building
+
+`plantuml.plug.js` is committed; rebuild it whenever `plantuml.ts` changes.
+
+This fork is built with the `plug-compile` CLI of a
+[SilverBullet](https://github.com/silverbulletmd/silverbullet) checkout, which
+also provides the worker runtime that every plug bundle embeds (that runtime is
+what keeps the browser's `fetch` available as `nativeFetch`):
+
+```bash
+cd /path/to/silverbullet && npm install && npm run build:plug-compile
+cd /path/to/silverbullet-plantuml && SB_DIR=/path/to/silverbullet sh scripts/build-node.sh
+```
+
+`deno task build` (the upstream workflow) is currently broken with the published
+edge `plug-compile.js` — it fails with `Import "sass" not a dependency` before it
+ever looks at the plug. Hence the Node build above.
+
+The `edge` release that `ghr:` URIs resolve to can be published with:
+
+```bash
+gh release create edge --title edge --notes "…" plantuml.plug.js
+```
 
 ## Use
 
