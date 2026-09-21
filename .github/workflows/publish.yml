@@ -12,13 +12,16 @@ jobs:
       - name: Clone repository
         uses: actions/checkout@v4
 
-      - name: Install Deno
-        uses: denoland/setup-deno@v2
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          deno-version: v2.x
+          node-version: 22
+
+      - name: Install build dependencies
+        run: npm ci
 
       - name: Build step
-        run: "deno task build"
+        run: npm run build
 
       - name: Update release tag
         uses: rickstaa/action-create-tag@v1
@@ -36,3 +39,4 @@ jobs:
           body: Automated build from commit ${{ github.sha }}
           files: |
             plantuml.plug.js
+            PLUG.md

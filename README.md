@@ -169,26 +169,30 @@ This helper script is needed as I couldn't get to call the plantuml.jar directly
 
 ## Building
 
-`plantuml.plug.js` is committed; rebuild it whenever `plantuml.ts` changes.
-
-This fork is built with the `plug-compile` CLI of a
-[SilverBullet](https://github.com/silverbulletmd/silverbullet) checkout, which
-also provides the worker runtime that every plug bundle embeds (that runtime is
-what keeps the browser's `fetch` available as `nativeFetch`):
+`plantuml.plug.js` is committed; rebuild it whenever `plantuml.ts` changes:
 
 ```bash
-cd /path/to/silverbullet && npm install && npm run build:plug-compile
-cd /path/to/silverbullet-plantuml && SB_DIR=/path/to/silverbullet sh scripts/build-node.sh
+npm install
+npm run build
 ```
 
-`deno task build` (the upstream workflow) is currently broken with the published
-edge `plug-compile.js` — it fails with `Import "sass" not a dependency` before it
-ever looks at the plug. Hence the Node build above.
+The compiler is the `plug-compile` CLI that ships inside the
+`@silverbulletmd/silverbullet` npm package — the same toolchain the official
+[silverbullet-plug-template](https://github.com/silverbulletmd/silverbullet-plug-template)
+uses. SilverBullet itself has been Deno-free since the
+[Deno → Node.js migration](https://github.com/silverbulletmd/silverbullet/pull/1839)
+(client build: npm + ESBuild + vitest, server: Rust), so this fork drops the
+legacy `deno.jsonc` / `deno task build` / `import_map.json` from upstream. That
+task had also stopped working: the published edge `plug-compile.js` is a Node
+program and Deno can no longer resolve its dependencies (`Import "sass" not a
+dependency`).
 
-The `edge` release that `ghr:` URIs resolve to can be published with:
+The [Publish](.github/workflows/publish.yml) workflow rebuilds the plug and
+updates the `edge` release (which `ghr:` URIs resolve to) on every push to
+`main`. To publish one by hand:
 
 ```bash
-gh release create edge --title edge --notes "…" plantuml.plug.js
+gh release create edge --title edge --notes "…" plantuml.plug.js PLUG.md
 ```
 
 ## Use

@@ -1,11 +1,12 @@
 {
   "name": "silverbullet-plantuml",
   "private": true,
-  "description": "Build dependencies for the plug's Node build (scripts/build-node.sh). Deno users do not need this file.",
   "scripts": {
-    "build": "sh scripts/build-node.sh"
+    "build": "sh scripts/build.sh",
+    "watch": "plug-compile -w plantuml.plug.yaml"
   },
   "devDependencies": {
+    "@silverbulletmd/silverbullet": "^2.11.0",
     "plantuml-encoder": "^1.4.0"
   }
 }
