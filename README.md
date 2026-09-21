@@ -30,8 +30,8 @@ that endpoint requires write access). This fork prefers the browser's own
 
 | `fetchmode` | Who makes the request | Requires |
 | --- | --- | --- |
-| `frontend` | the browser, straight to the PlantUML server | CORS headers from the PlantUML server |
-| `proxy` | the SilverBullet server (`/.proxy`) | write access to the space, reachable server |
+| `frontend` | the browser, straight to the PlantUML server (`serverurl`) | CORS headers from the PlantUML server |
+| `proxy` | the SilverBullet server (`/.proxy`, `proxyurl`, falls back to `serverurl`) | write access to the space, reachable server |
 | `auto` (default) | `frontend`, falling back to `proxy` | — |
 
 The default remote server (`https://www.plantuml.com/plantuml`) sends
@@ -59,6 +59,23 @@ or to avoid the failed frontend attempt on a CORS-less server):
 ```space-lua
 config.set("plantuml", {serverurl="https://plantuml.com/plantuml", fetchmode="proxy"})
 ```
+
+### Frontend URL and proxy URL may differ
+
+The URL a browser should use is often not the URL the SilverBullet server
+should use: a self-hosted PlantUML server is commonly plain `http:` inside the
+network (unusable from an `https:` space, see above) while its `https:` reverse
+proxy is what readers' browsers can reach. Set `proxyurl` to give the fallback
+its own base URL:
+
+```space-lua
+config.set("plantuml", {
+  serverurl = "https://plantuml.example.com/plantuml", -- browser (frontend fetch)
+  proxyurl = "http://10.0.0.5:8080",                   -- SilverBullet server (fallback)
+})
+```
+
+`proxyurl` defaults to `serverurl`.
 
 ## Configuration
 

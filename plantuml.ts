@@ -79,8 +79,13 @@ function mixedContentReason(url: string): string | null {
   return `an https page may not fetch ${url} (mixed content)`;
 }
 
-async function fetchDiagram(url: string, mode: FetchMode): Promise<string> {
-  const blocked = mixedContentReason(url);
+async function fetchDiagram(
+  frontendUrl: string,
+  proxyUrl: string,
+  mode: FetchMode,
+): Promise<string> {
+  const blocked = mixedContentReason(frontendUrl);
+
   // `frontendFetch === fetch` means there is nothing to choose between: either
   // the worker patch never happened, or it did and `nativeFetch` is missing.
   const frontendAvailable = frontendFetch !== fetch;
@@ -89,10 +94,13 @@ async function fetchDiagram(url: string, mode: FetchMode): Promise<string> {
     if (blocked) {
       throw new Error(`frontend fetch mode requested, but ${blocked}`);
     }
-    return await requestDiagram(frontendFetch, url);
+    if (!frontendAvailable) {
+      throw new Error("frontend fetch mode requested, but no browser fetch is available");
+    }
+    return await requestDiagram(frontendFetch, frontendUrl);
   }
   if (mode === "proxy" || !frontendAvailable) {
-    return await requestDiagram(fetch, url);
+    return await requestDiagram(fetch, proxyUrl);
   }
 
   if (blocked) {
@@ -100,34 +108,46 @@ async function fetchDiagram(url: string, mode: FetchMode): Promise<string> {
     console.info(
       `silverbullet-plantuml: using the server proxy, because ${blocked}`,
     );
-    return await requestDiagram(fetch, url);
+    return await requestDiagram(fetch, proxyUrl);
   }
 
   try {
-    return await requestDiagram(frontendFetch, url);
+    return await requestDiagram(frontendFetch, frontendUrl);
   } catch (error) {
     console.warn(
       "silverbullet-plantuml: frontend fetch failed, retrying through the SilverBullet server proxy",
       error,
     );
   }
-  return await requestDiagram(fetch, url);
+  return await requestDiagram(fetch, proxyUrl);
 }
 
+function diagramUrl(serverurl: string, encoded: string): string {
+  const sep = serverurl.endsWith("/") ? "" : "/";
+  return `${serverurl}${sep}svg/${encoded}`;
+}
+
+/**
+ * @param serverurl base URL used for the frontend fetch
+ * @param proxyurl base URL used for the proxy fallback, `serverurl` when unset
+ */
 export async function pumlserver(
   serverurl: string,
   uml: string,
   mode: FetchMode = "auto",
+  proxyurl?: string,
 ) {
   try {
     const encoded = plantumlEncoder.encode(uml);
-    let sep = "/";
-    if (serverurl.endsWith("/"))
-      sep = "";
-    let url = serverurl + sep + 'svg/' + encoded;
-    console.log("silverbullet-plantuml: requesting", url, `(fetch mode: ${mode})`);
-    const data = await fetchDiagram(url, mode);
-    return data;
+    const frontendUrl = diagramUrl(serverurl, encoded);
+    const proxyUrl = proxyurl ? diagramUrl(proxyurl, encoded) : frontendUrl;
+    console.log(
+      "silverbullet-plantuml: requesting",
+      frontendUrl,
+      `(fetch mode: ${mode})`,
+      proxyurl ? `(proxy fallback: ${proxyurl})` : "",
+    );
+    return await fetchDiagram(frontendUrl, proxyUrl, mode);
   } catch (error) {
     console.error("PUML generation failed", error);
     return error;
@@ -145,7 +165,12 @@ export async function widget(
 
   let result: string = bodyText;
   if ('serverurl' in userConfig) {
-    result = await pumlserver(userConfig.serverurl, bodyText, userConfig.fetchmode);
+    result = await pumlserver(
+      userConfig.serverurl,
+      bodyText,
+      userConfig.fetchmode,
+      userConfig.proxyurl,
+    );
   } else if ('generator' in userConfig) {
     result = await pumllocal(userConfig.generator, bodyText);
   } else {

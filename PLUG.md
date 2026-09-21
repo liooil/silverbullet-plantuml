@@ -33,7 +33,9 @@ Set the PlantUML server (and optionally the fetch mode) in your own `CONFIG` pag
     config.set("plantuml", {serverurl="https://www.plantuml.com/plantuml"})
 
 `fetchmode` is optional: `"auto"` (default), `"frontend"`, or `"proxy"`.
-See the [repository README](https://github.com/liooil/silverbullet-plantuml#fetching).
+`proxyurl` is optional: a separate base URL for the proxy fallback (useful when
+only an `https` reverse proxy of the PlantUML server is reachable from the
+browser). See the [repository README](https://github.com/liooil/silverbullet-plantuml#fetching).
 
 > Deliberately not a `space-lua` block: code blocks in this page would run when
 > the page is indexed, overriding whatever the space's own CONFIG sets.
