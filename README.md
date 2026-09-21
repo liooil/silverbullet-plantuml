@@ -46,6 +46,13 @@ not send CORS headers still works through the fallback.
 > fetch of it always fails and every diagram ends up going through the proxy
 > fallback. (That is why this fork's default differs from upstream's.)
 
+> **Note**
+> An `https:` space cannot fetch a plain `http:` PlantUML server at all —
+> browsers block that as mixed content. With `auto` such a target goes straight
+> to the proxy; with `frontend` it fails with an explicit error. Serve the
+> PlantUML server over `https` (a reverse proxy in front of it is enough) if you
+> want the frontend fetch, e.g. `config.set("plantuml", {serverurl="https://plantuml.example.com/plantuml"})`.
+
 To pin a mode explicitly (for example to keep diagrams off the client network,
 or to avoid the failed frontend attempt on a CORS-less server):
 

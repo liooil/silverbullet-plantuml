@@ -11,7 +11,9 @@ import plantumlEncoder from "plantuml-encoder";
  * - `"proxy"`: SilverBullet's `/.proxy` endpoint, i.e. the request is made by
  *   the SilverBullet server. Works for servers without CORS headers, but
  *   requires write access to the space and a reachable server.
- * - `"auto"` (default): try `"frontend"` first, fall back to `"proxy"`.
+ * - `"auto"` (default): try `"frontend"` first, fall back to `"proxy"`. A
+ *   frontend fetch that a browser is guaranteed to refuse (plain `http:` from
+ *   an `https:` page) is skipped and goes straight to the proxy.
  */
 export type FetchMode = "frontend" | "proxy" | "auto";
 
@@ -50,25 +52,65 @@ async function requestDiagram(
   return await response.text();
 }
 
-async function fetchDiagram(url: string, mode: FetchMode): Promise<string> {
-  // `frontendFetch === fetch` means there is nothing to fall back to: either
-  // the worker patch never happened, or it did and `nativeFetch` is missing.
-  const proxyAvailable = mode !== "frontend" && frontendFetch !== fetch;
+/**
+ * Why a frontend fetch of `url` is impossible, or `null` when it may work.
+ *
+ * A browser refuses to fetch plain `http:` from a page served over `https:`
+ * (mixed content), so on an https space an `http://` PlantUML server can only
+ * be reached through the server proxy. Loopback is exempt: browsers treat it as
+ * potentially trustworthy.
+ */
+function mixedContentReason(url: string): string | null {
+  if (location.protocol !== "https:") {
+    return null;
+  }
+  let target: URL;
+  try {
+    target = new URL(url);
+  } catch {
+    return null;
+  }
+  if (target.protocol !== "http:") {
+    return null;
+  }
+  if (["localhost", "127.0.0.1", "::1", "[::1]"].includes(target.hostname)) {
+    return null;
+  }
+  return `an https page may not fetch ${url} (mixed content)`;
+}
 
-  if (mode !== "proxy") {
-    try {
-      return await requestDiagram(frontendFetch, url);
-    } catch (error) {
-      if (!proxyAvailable) {
-        throw error;
-      }
-      console.warn(
-        "silverbullet-plantuml: frontend fetch failed, retrying through the SilverBullet server proxy",
-        error,
-      );
+async function fetchDiagram(url: string, mode: FetchMode): Promise<string> {
+  const blocked = mixedContentReason(url);
+  // `frontendFetch === fetch` means there is nothing to choose between: either
+  // the worker patch never happened, or it did and `nativeFetch` is missing.
+  const frontendAvailable = frontendFetch !== fetch;
+
+  if (mode === "frontend") {
+    if (blocked) {
+      throw new Error(`frontend fetch mode requested, but ${blocked}`);
     }
+    return await requestDiagram(frontendFetch, url);
+  }
+  if (mode === "proxy" || !frontendAvailable) {
+    return await requestDiagram(fetch, url);
   }
 
+  if (blocked) {
+    // Not worth attempting (and worth no warning): it is guaranteed to fail.
+    console.info(
+      `silverbullet-plantuml: using the server proxy, because ${blocked}`,
+    );
+    return await requestDiagram(fetch, url);
+  }
+
+  try {
+    return await requestDiagram(frontendFetch, url);
+  } catch (error) {
+    console.warn(
+      "silverbullet-plantuml: frontend fetch failed, retrying through the SilverBullet server proxy",
+      error,
+    );
+  }
   return await requestDiagram(fetch, url);
 }
 
