@@ -34,11 +34,17 @@ that endpoint requires write access). This fork prefers the browser's own
 | `proxy` | the SilverBullet server (`/.proxy`) | write access to the space, reachable server |
 | `auto` (default) | `frontend`, falling back to `proxy` | — |
 
-The default remote server (`https://plantuml.com/plantuml`) sends
+The default remote server (`https://www.plantuml.com/plantuml`) sends
 `Access-Control-Allow-Origin: *`, so with `auto` the request never touches the
 server proxy. That makes the plug work in read-only/published spaces and while
 the SilverBullet server is unreachable. A self-hosted PlantUML server that does
 not send CORS headers still works through the fallback.
+
+> **Note**
+> Use `www.plantuml.com`, not the apex `plantuml.com`: the apex answers with a
+> 301 to `http://www.plantuml.com/…` that carries no CORS headers, so a browser
+> fetch of it always fails and every diagram ends up going through the proxy
+> fallback. (That is why this fork's default differs from upstream's.)
 
 To pin a mode explicitly (for example to keep diagrams off the client network,
 or to avoid the failed frontend attempt on a CORS-less server):
@@ -61,7 +67,7 @@ There are four types of configuration possible
 Add this to your `SETTINGS.md`
 
 ```space-lua
-config.set("plantuml", {serverurl="https://plantuml.com/plantuml"})
+config.set("plantuml", {serverurl="https://www.plantuml.com/plantuml"})
 ```
 
 This configuration uses the offical PlantUML server to generate the diagram. If you do not want to send the data to PlantUML server check other configuration options.

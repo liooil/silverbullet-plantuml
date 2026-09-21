@@ -96,7 +96,10 @@ export async function widget(
   bodyText: string,
 ) {
 
-  const userConfig = await system.getConfig("plantuml", { serverurl: 'https://plantuml.com/plantuml' });
+  // `www.` matters: the apex domain answers with a 301 to `http://www.…` that
+  // carries no CORS headers, so a browser fetch of `https://plantuml.com/…`
+  // always fails (the server proxy follows the redirect just fine).
+  const userConfig = await system.getConfig("plantuml", { serverurl: 'https://www.plantuml.com/plantuml' });
 
   let result: string = bodyText;
   if ('serverurl' in userConfig) {

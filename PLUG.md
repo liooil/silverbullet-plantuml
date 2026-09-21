@@ -29,7 +29,7 @@ And move your cursor outside of the block to live preview it!
 ## Configuration
 
 ```space-lua
-config.set("plantuml", {serverurl="https://plantuml.com/plantuml"})
+config.set("plantuml", {serverurl="https://www.plantuml.com/plantuml"})
 ```
 
 `fetchmode` is optional: `"auto"` (default), `"frontend"`, or `"proxy"`.
