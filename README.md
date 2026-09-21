@@ -3,9 +3,11 @@
 This plug adds basic [PlantUML](https://www.plantuml.com) support to Silver Bullet.
 
 > **This is a fork** of [LogeshG5/silverbullet-plantuml](https://github.com/LogeshG5/silverbullet-plantuml).
-> The only behavioural change: diagram requests are made with the browser's own
-> `fetch` (the *frontend* fetch) instead of SilverBullet's server-side `/.proxy`
-> endpoint, with an automatic fallback to the proxy. See [Fetching](#fetching).
+> Two changes: diagram requests are made with the browser's own `fetch` (the
+> *frontend* fetch) instead of SilverBullet's server-side `/.proxy` endpoint,
+> with an automatic fallback to the proxy (see [Fetching](#fetching)); and the
+> plug is a single hand-written file with no build step (see
+> [No build step](#no-build-step)).
 
 ## Installation
 
@@ -21,12 +23,30 @@ config.set {
 
 Run `Plugs: Update` command and off you go!
 
+## No build step
+
+`plantuml.plug.js` **is** the source: ~290 commented lines of plain JavaScript,
+no dependencies, no bundler, no `node_modules`, no CI build. Download it into a
+space, run `Plugs: Reload` and it is live; edit it in the space and reload again.
+Two things upstream gets from its build, and what this fork does instead:
+
+| Upstream build output | Here |
+| --- | --- |
+| plugos worker runtime + protocol (~3 KB) | the three messages of [client/plugos/protocol.ts](https://github.com/silverbulletmd/silverbullet/blob/main/client/plugos/protocol.ts) are implemented directly (`inv`/`invr`, `sys`/`sysr`, `manifest`) |
+| `plantuml-encoder` (~54 KB, i.e. pako deflate) | `CompressionStream("deflate-raw")` + PlantUML's 64-character alphabet (~20 lines) |
+
+A side effect of not embedding the runtime: the worker's `fetch` is the plain
+browser fetch, so the frontend fetch is the natural default here instead of
+something to be recovered from the patched `fetch`. The server proxy is still
+available explicitly, through the `sandboxFetch.fetch` syscall.
+
+`CompressionStream("deflate-raw")` needs a reasonably recent browser (Chrome/Edge
+103+, Firefox 113+, Safari 16.4+) — the same league as what the SilverBullet 2.x
+client itself requires.
+
 ## Fetching
 
-Plug code runs in a web worker in which SilverBullet replaces `fetch` with a
-version that routes every request through the server's `/.proxy` endpoint (and
-that endpoint requires write access). This fork prefers the browser's own
-`fetch` instead, which the worker runtime keeps available as `nativeFetch`:
+Diagrams are fetched by the browser first, with the server proxy as a fallback:
 
 | `fetchmode` | Who makes the request | Requires |
 | --- | --- | --- |
@@ -167,29 +187,12 @@ config.set("plantuml", {generator="/usr/local/bin/gen_plantuml_svg"})
 
 This helper script is needed as I couldn't get to call the plantuml.jar directly from this plugin.
 
-## Building
+## Releasing
 
-`plantuml.plug.js` is committed; rebuild it whenever `plantuml.ts` changes:
-
-```bash
-npm install
-npm run build
-```
-
-The compiler is the `plug-compile` CLI that ships inside the
-`@silverbulletmd/silverbullet` npm package — the same toolchain the official
-[silverbullet-plug-template](https://github.com/silverbulletmd/silverbullet-plug-template)
-uses. SilverBullet itself has been Deno-free since the
-[Deno → Node.js migration](https://github.com/silverbulletmd/silverbullet/pull/1839)
-(client build: npm + ESBuild + vitest, server: Rust), so this fork drops the
-legacy `deno.jsonc` / `deno task build` / `import_map.json` from upstream. That
-task had also stopped working: the published edge `plug-compile.js` is a Node
-program and Deno can no longer resolve its dependencies (`Import "sass" not a
-dependency`).
-
-The [Publish](.github/workflows/publish.yml) workflow rebuilds the plug and
-updates the `edge` release (which `ghr:` URIs resolve to) on every push to
-`main`. To publish one by hand:
+There is nothing to compile. Pushing to `main` runs
+[Publish](.github/workflows/publish.yml), which re-points the `edge` tag and
+uploads the committed `plantuml.plug.js` + `PLUG.md` as release assets (that is
+what `ghr:` URIs resolve to). To publish by hand:
 
 ```bash
 gh release create edge --title edge --notes "…" plantuml.plug.js PLUG.md
