@@ -29,10 +29,9 @@
 //     proxyurl  = "http://10.0.0.5:8080",              -- optional fallback URL,
 //                                                      -- defaults to serverurl
 //     fetchmode = "auto",                              -- auto | frontend | proxy
-//     darktheme = "cyborg",                            -- PlantUML theme for the
-//                                                      -- dark variant, rendered
-//                                                      -- on demand; false or
-//                                                      -- "_none_" disables it
+//     darktheme = false,                               -- optional PlantUML theme
+//                                                      -- for dark mode; unset
+//                                                      -- inverts the light one
 //     lighttheme = "_none_",                           -- optional light theme
 //   })
 //
@@ -51,10 +50,6 @@ const manifest = {
   requiredPermissions: ["shell", "fetch"],
   functions: {
     plantumlWidget: { codeWidget: "plantuml" },
-    // Called by the widget itself, through `system.invokeFunction`, when the
-    // editor switches to a theme whose diagram has not been rendered yet. A
-    // function has to be declared here to be invokable that way.
-    renderVariant: {},
   },
 };
 
@@ -64,7 +59,6 @@ const manifest = {
 
 const functions = {
   plantumlWidget: widget,
-  renderVariant: renderVariant,
 };
 
 let syscallReqId = 0;
@@ -267,43 +261,23 @@ function escapeHtml(text) {
     .replaceAll(">", "&gt;");
 }
 
-function escapeAttribute(text) {
-  return escapeHtml(text).replaceAll('"', "&quot;");
-}
-
 // ---------------------------------------------------------------------------
 // The code widget
 // ---------------------------------------------------------------------------
 
-// PlantUML has no automatic dark mode: the colors are baked into the render,
-// and a dark diagram means asking for one of its own dark themes (`!theme
-// cyborg`, `superhero`, `hacker`, `mars`, …). Without one, every diagram is a
-// bright box on SilverBullet's dark theme. The widget therefore keeps one
-// diagram per theme: it renders the variant the editor is showing, and asks for
-// the other one — through `renderVariant` below — only once the theme actually
-// switches to it.
-const DEFAULT_DARK_THEME = "cyborg";
-
-// Which configuration key holds the PlantUML theme of each variant.
-const VARIANT_CONFIG = { light: "lighttheme", dark: "darktheme" };
-
-// Renders are kept per (theme, server, source) for the lifetime of the plug
-// worker, i.e. until the plug is reloaded: asking for the same variant again
-// (a widget that scrolled back into view, a page reopened) costs nothing.
-const renderCache = new Map();
-const RENDER_CACHE_SIZE = 100;
-
-// The variant for the editor's current theme is the one on screen. The other
-// one may not have been rendered yet; `data-invert` then marks that what is on
-// screen is not the variant for this theme (it is still being rendered, or
-// there is no dark theme at all), so it is shown inverted rather than as a
-// white box.
+// PlantUML has no dark mode of its own: a diagram's colors — including its
+// white background — are baked into the render, and the only way to get a dark
+// diagram out of PlantUML is one of its own dark themes. Inverting the light
+// render with a CSS filter instead needs no second render, and because
+// PlantUML's default palette is nearly neutral it comes out looking neutral
+// too. So that inversion is what dark mode does by default; `darktheme` below
+// hands the dark variant to one of PlantUML's themes instead.
 const WIDGET_CSS = `
 html, body { background: transparent; }
 .puml-variant { display: none; }
 html:not([data-theme="dark"]) #plantuml .puml-variant[data-variant="light"],
 html[data-theme="dark"] #plantuml .puml-variant[data-variant="dark"] { display: inline-block; }
-#plantuml[data-invert] .puml-variant {
+html[data-theme="dark"] #plantuml[data-dark="invert"] .puml-variant[data-variant="light"] {
   display: inline-block;
   filter: invert(1) hue-rotate(180deg);
 }
@@ -312,8 +286,8 @@ html[data-theme="dark"] #plantuml .puml-variant[data-variant="dark"] { display: 
 // The theme reaches a widget iframe once, with the initial `html` message; and
 // unlike panels, a widget is not sent a `theme` message when the editor
 // switches between light and dark mode. The iframe is same-origin, so the
-// widget watches the host document itself and renders the missing variant when
-// the theme changes.
+// widget watches the host document itself; the CSS above then picks the variant
+// to show (or inverts it).
 const WIDGET_SCRIPT = `
 const hostRoot = (() => {
   try {
@@ -322,79 +296,11 @@ const hostRoot = (() => {
     return null;
   }
 })();
-const pre = document.getElementById("plantuml");
-const source = pre && pre.dataset.source;
-const darkThemeAvailable = pre && pre.dataset.dark === "theme";
-// Stored on the <pre>, so a re-mounted widget (whose html is replaced) starts
-// from a clean slate rather than reusing a previous diagram's state.
-const state = pre &&
-  (pre.plantumlState || (pre.plantumlState = { pending: {}, failed: {} }));
-
-const variantElement = (variant) =>
-  pre && pre.querySelector('.puml-variant[data-variant="' + variant + '"]');
-
-const wantedVariant = () => {
-  const theme = (hostRoot && hostRoot.dataset.theme) ||
-    document.documentElement.dataset.theme;
-  return theme === "dark" ? "dark" : "light";
-};
-
-// Shows the variant for the editor's theme; while it does not exist yet, the
-// one that does is shown inverted.
-function show() {
-  if (!pre || !state) {
-    return;
-  }
-  const wanted = wantedVariant();
-  if (variantElement(wanted)) {
-    delete pre.dataset.invert;
-    return;
-  }
-  pre.dataset.invert = "";
-  if (wanted === "light" || darkThemeAvailable) {
-    render(wanted);
-  }
-}
-
-// Asks the plug for a variant that is not on screen yet.
-async function render(variant) {
-  if (
-    !source || !pre || state.pending[variant] || state.failed[variant] ||
-    typeof syscall !== "function"
-  ) {
-    return;
-  }
-  state.pending[variant] = true;
-  try {
-    const svg = await syscall(
-      "system.invokeFunction",
-      "plantuml.renderVariant",
-      source,
-      variant,
-    );
-    const span = document.createElement("span");
-    span.className = "puml-variant";
-    span.dataset.variant = variant;
-    span.innerHTML = svg;
-    delete pre.dataset.invert;
-    pre.appendChild(span);
-  } catch (error) {
-    // Keep showing the inverted variant rather than retrying on every theme
-    // change (or worse, on every re-render).
-    state.failed[variant] = true;
-    console.warn("[plantuml] could not render the " + variant + " diagram", error);
-  } finally {
-    delete state.pending[variant];
-    show();
-  }
-}
-
 const syncTheme = () => {
   const theme = hostRoot && hostRoot.dataset.theme;
   if (theme) {
     document.documentElement.dataset.theme = theme;
   }
-  show();
 };
 syncTheme();
 // Widget iframes are pooled and re-mounted, which evaluates this script again
@@ -409,9 +315,9 @@ if (!globalThis.plantumlThemeWatcher) {
       { attributes: true, attributeFilter: ["data-theme"] },
     );
   }
-  // Clicking the widget should put the cursor back in the editor; "blur" is
-  // the message the SilverBullet client acts on (the api() helper this used
-  // to call does not exist in v2).
+  // Clicking the widget should put the cursor back in the editor; "blur" is the
+  // message the SilverBullet client acts on (the api() helper this used to call
+  // does not exist in v2).
   document.addEventListener("click", () => {
     parent.postMessage({ type: "blur" }, "*");
   });
@@ -433,50 +339,7 @@ function themedSource(uml, theme) {
   return lines.join("\n");
 }
 
-async function loadConfig() {
-  const config = await syscall("system.getConfig", PLUG_NAME, {
-    serverurl: DEFAULT_SERVERURL,
-  });
-  if (config.darktheme === undefined) {
-    config.darktheme = DEFAULT_DARK_THEME;
-  }
-  return config;
-}
-
-// Whether a variant is rendered with a PlantUML theme at all.
-function usesTheme(config, variant) {
-  const theme = config[VARIANT_CONFIG[variant]];
-  return Boolean(theme) && theme !== "_none_";
-}
-
 async function renderDiagram(config, uml, theme) {
-  // Keyed by what the render depends on, so a variant rendered earlier (a
-  // re-mounted widget, a page opened again) is reused, and an in-flight request
-  // is not made twice.
-  const key = JSON.stringify([
-    theme ?? null,
-    config.serverurl ?? null,
-    config.generator ?? null,
-    uml,
-  ]);
-  const cached = renderCache.get(key);
-  if (cached) {
-    return await cached;
-  }
-  const pending = renderUncached(config, uml, theme);
-  if (renderCache.size >= RENDER_CACHE_SIZE) {
-    renderCache.delete(renderCache.keys().next().value);
-  }
-  renderCache.set(key, pending);
-  try {
-    return await pending;
-  } catch (error) {
-    renderCache.delete(key);
-    throw error;
-  }
-}
-
-async function renderUncached(config, uml, theme) {
   const source = themedSource(uml, theme);
   if (config.serverurl) {
     return await pumlServer(config, source);
@@ -487,79 +350,51 @@ async function renderUncached(config, uml, theme) {
   throw new Error("configure either serverurl or generator");
 }
 
-// Whether the editor is in dark mode right now. `undefined` means the editor
-// follows the operating system, in which case only the client knows which
-// variant is needed — it asks for the other one right after mounting.
-async function editorDarkMode() {
-  try {
-    return (await syscall("editor.getUiOption", "darkMode")) === true;
-  } catch (error) {
-    console.warn(`[${PLUG_NAME}] cannot read the editor's dark mode`, error);
-    return false;
-  }
-}
-
-function widgetHtml({ svg, variant, source, dark }) {
+function widgetHtml(light, dark) {
   return (
     `<style>${WIDGET_CSS}</style>` +
-    `<pre id="plantuml" data-dark="${dark ? "theme" : "invert"}"` +
-    (source ? ` data-source="${escapeAttribute(source)}"` : "") +
-    `>` +
-    `<span class="puml-variant" data-variant="${variant}">${svg}</span>` +
+    `<pre id="plantuml" data-dark="${dark === null ? "invert" : "theme"}">` +
+    `<span class="puml-variant" data-variant="light">${light}</span>` +
+    (dark === null
+      ? ""
+      : `<span class="puml-variant" data-variant="dark">${dark}</span>`) +
     `</pre>`
   );
 }
 
-function errorWidget(error) {
-  return {
-    html: widgetHtml({
-      svg: escapeHtml(`PlantUML error: ${error?.message ?? error}`),
-      variant: "light",
-      source: "",
-      dark: false,
-    }),
-    script: WIDGET_SCRIPT,
-  };
-}
-
-// Called by the widget through `system.invokeFunction` when the editor switches
-// to a variant that has not been rendered yet.
-async function renderVariant(uml, variant) {
-  const config = await loadConfig();
-  return await renderDiagram(config, uml, config[VARIANT_CONFIG[variant]]);
-}
-
 async function widget(bodyText) {
-  const config = await loadConfig();
-  let dark = usesTheme(config, "dark");
-  let variant = dark && (await editorDarkMode()) ? "dark" : "light";
+  const config = await syscall("system.getConfig", PLUG_NAME, {
+    serverurl: DEFAULT_SERVERURL,
+  });
 
-  let svg;
+  let light;
   try {
-    svg = await renderDiagram(config, bodyText, config[VARIANT_CONFIG[variant]]);
+    light = await renderDiagram(config, bodyText, config.lighttheme);
   } catch (error) {
-    if (variant !== "dark") {
-      console.error(`[${PLUG_NAME}] PUML generation failed`, error);
-      return errorWidget(error);
-    }
-    // A dark theme that does not render should not cost the diagram itself:
-    // fall back to the plain render and let dark mode invert it.
-    console.warn(
-      `[${PLUG_NAME}] dark render failed, falling back to the plain diagram`,
-      error,
-    );
-    dark = false;
-    variant = "light";
+    console.error(`[${PLUG_NAME}] PUML generation failed`, error);
+    return {
+      html: widgetHtml(
+        escapeHtml(`PlantUML error: ${error?.message ?? error}`),
+        null,
+      ),
+      script: WIDGET_SCRIPT,
+    };
+  }
+
+  // Only a configured dark theme is rendered twice; without one dark mode just
+  // inverts the light diagram, and a dark theme that fails to render falls back
+  // to that as well.
+  let dark = null;
+  if (config.darktheme && config.darktheme !== "_none_") {
     try {
-      svg = await renderDiagram(config, bodyText, config.lighttheme);
-    } catch (fallbackError) {
-      console.error(`[${PLUG_NAME}] PUML generation failed`, fallbackError);
-      return errorWidget(fallbackError);
+      dark = await renderDiagram(config, bodyText, config.darktheme);
+    } catch (error) {
+      console.warn(
+        `[${PLUG_NAME}] dark theme render failed, inverting instead`,
+        error,
+      );
     }
   }
 
-  return {
-    html: widgetHtml({ svg, variant, source: bodyText, dark }),
-    script: WIDGET_SCRIPT,
-  };
+  return { html: widgetHtml(light, dark), script: WIDGET_SCRIPT };
 }

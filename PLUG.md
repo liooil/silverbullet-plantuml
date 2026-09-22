@@ -39,16 +39,14 @@ browser). See the [repository README](https://github.com/liooil/silverbullet-pla
 
 ## Dark mode
 
-PlantUML has no automatic dark mode, so diagrams would stay white boxes on
-SilverBullet's dark theme. The widget renders the diagram for the editor's
-current theme and asks the plug for the other one when the theme switches
-(showing the first one inverted for the moment that takes), so no diagram is
-rendered twice: `darktheme` (default `cyborg`) names the
-[PlantUML theme](https://plantuml.com/theme) for the dark render, `lighttheme`
-optionally themes the light one. Set `darktheme = false` to skip the dark
-render — dark mode then always inverts the light diagram.
+PlantUML has no dark mode of its own — a diagram's colors, white background
+included, are baked into the render — so in dark mode the light diagram is
+inverted with a CSS filter: no second render, no flicker. If you would rather
+have one of [PlantUML's themes](https://plantuml.com/theme) on the dark side, set
+it and the diagram is rendered for both themes at once and switched client-side
+(switching stays instant):
 
-    config.set("plantuml", {serverurl="https://www.plantuml.com/plantuml", darktheme="superhero"})
+    config.set("plantuml", {serverurl="https://www.plantuml.com/plantuml", darktheme="cyborg"})
 
 See [Dark mode](https://github.com/liooil/silverbullet-plantuml#dark-mode) in the README.
 

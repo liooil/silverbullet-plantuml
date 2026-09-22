@@ -41,7 +41,7 @@ into a space and run `Plugs: Reload` — any `*.plug.js` in a space is loaded.
 
 ## No build step
 
-`plantuml.plug.js` **is** the source: ~570 commented lines of plain JavaScript,
+`plantuml.plug.js` **is** the source: ~400 commented lines of plain JavaScript,
 no dependencies, no bundler, no `node_modules`, no CI build. Download it into a
 space, run `Plugs: Reload` and it is live; edit it in the space and reload again.
 Two things upstream gets from its build, and what this fork does instead:
@@ -115,49 +115,38 @@ config.set("plantuml", {
 
 ## Dark mode
 
-PlantUML has no automatic dark mode: a diagram's colors are baked into the
-render, and the way to get a dark diagram is one of PlantUML's own
-[dark themes](https://plantuml.com/theme) (`cyborg`, `superhero`, `hacker`,
-`mars`, `materia`, `spacelab`, `black-knight`, …). Left alone, diagrams are
-bright white boxes on SilverBullet's dark theme.
+PlantUML has no dark mode of its own: a diagram's colors — its white background
+included — are baked into the render, and the only dark diagram PlantUML can
+produce is one drawn with one of its own [themes](https://plantuml.com/theme).
+So in dark mode the light render is simply inverted with a CSS filter
+(`invert(1) hue-rotate(180deg)`, the usual trick for images). That needs no
+second render and cannot flicker, and because PlantUML's default palette is
+nearly neutral, what comes out is a neutral dark diagram. Nothing to configure
+— this is the default.
 
-So a diagram is rendered **once per theme, on demand**: the widget renders the
-variant for the theme the editor is in, and when the theme switches it asks the
-plug for the other one — `renderVariant`, called from the widget through
-`system.invokeFunction` — and swaps it in. Until that render arrives, and if it
-never does, the variant that is on screen is shown inverted rather than as a
-white box. Renders are cached per theme/server/source until the plug is
-reloaded, so switching back and forth (or scrolling a diagram out of view and
-back) renders nothing twice.
-
-Which theme each variant uses is configuration; `darktheme` (default `cyborg`)
-can be any PlantUML theme, `lighttheme` is optional:
+Since that filter turns *every* color around (the `hue-rotate` brings hues back,
+so diagrams stay recognisable, but a custom palette or an embedded image does not
+survive unchanged), one of PlantUML's own themes can be used instead:
 
 ```space-lua
 config.set("plantuml", {
-  darktheme = "superhero", -- any PlantUML theme; default "cyborg"
-  lighttheme = "_none_",   -- optional, for the light variant
+  darktheme = "cyborg",  -- optional; without it, dark mode inverts
+  lighttheme = "_none_", -- optional, for the light variant
 })
 ```
 
-A diagram that sets its own `!theme` (or `skinparam`s) keeps them: the plug's
-`!theme` is injected right after `@startuml`, and PlantUML applies the last one.
+A themed variant is rendered a second time while the widget is built — with
+`!theme cyborg` injected right after `@startuml` — and both variants ship inside
+the widget, so switching themes stays instant. A diagram that sets its own
+`!theme` (or `skinparam`s) keeps them: PlantUML applies the last `!theme`, and
+the plug's is injected first.
 
-Several dark themes (`cyborg`, `cyborg-outline`, `superhero`,
+Several of the dark themes (`cyborg`, `cyborg-outline`, `superhero`,
 `superhero-outline`, `hacker`, `materia`, `spacelab`, `black-knight`) leave the
 background transparent, so SilverBullet's own background shows through instead
 of a dark box; others (`mars`, `crt-green`, `reddress-darkblue`, …) paint a
-background of their own.
-
-Set `darktheme = false` (or `"_none_"`) to skip the dark render altogether:
-dark mode then always inverts the light diagram.
-
-The editor's dark mode is read while the widget is rendered
-(`editor.getUiOption("darkMode")`), so an explicit dark mode gets the dark
-diagram right away. When that setting follows the operating system it reports
-nothing, and the widget renders the plain diagram first and asks for the dark
-one as soon as it knows the resolved theme — that is the one case where the
-inverted diagram is visible for a moment.
+background of their own. The default inversion keeps the light render's white
+background, which is what turns it into the black box around the diagram.
 
 ## Configuration
 
